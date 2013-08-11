@@ -1,0 +1,214 @@
+FUNCTION  28()
+Called 6 times
+Total time:   0.000194
+ Self time:   0.000073
+
+count  total (s)   self (s)
+    6   0.000186   0.000065     return nerdtree#runningWindows() ? '\' : '/'
+
+FUNCTION  33()
+Called 3 times
+Total time:   0.000746
+ Self time:   0.000322
+
+count  total (s)   self (s)
+    3              0.000030     let options = a:0 ? a:1 : {}
+    3              0.000012     let toReturn = ""
+                            
+    3              0.000022     if has_key(options, 'format')
+                                    let format = options['format']
+                                    if has_key(self, '_strFor' . format)
+                                        exec 'let toReturn = self._strFor' . format . '()'
+                                    else
+                                        raise 'NERDTree.UnknownFormatError: unknown format "'. format .'"'
+                                    endif
+                                else
+    3   0.000436   0.000042         let toReturn = self._str()
+    3              0.000006     endif
+                            
+    3   0.000066   0.000036     if nerdtree#has_opt(options, 'escape')
+                                    let toReturn = shellescape(toReturn)
+                                endif
+                            
+    3              0.000015     if has_key(options, 'truncateTo')
+                                    let limit = options['truncateTo']
+                                    if len(toReturn) > limit
+                                        let toReturn = "<" . strpart(toReturn, len(toReturn) - limit + 1)
+                                    endif
+                                endif
+                            
+    3              0.000009     return toReturn
+
+FUNCTION  38()
+Called 3 times
+Total time:   0.000394
+ Self time:   0.000145
+
+count  total (s)   self (s)
+    3   0.000153   0.000040     let lead = s:Path.Slash()
+                            
+                                "if we are running windows then slap a drive letter on the front
+    3   0.000078   0.000023     if nerdtree#runningWindows()
+                                    let lead = self.drive . '\'
+                                endif
+                            
+    3   0.000129   0.000048     return lead . join(self.pathSegments, s:Path.Slash())
+
+FUNCTION  nerdtree#runningWindows()
+Called 9 times
+Total time:   0.000176
+ Self time:   0.000176
+
+count  total (s)   self (s)
+    9              0.000164     return has("win16") || has("win32") || has("win64")
+
+FUNCTION  <SNR>71_Highlight_Matching_Pair()
+Called 1 time
+Total time:   0.000212
+ Self time:   0.000212
+
+count  total (s)   self (s)
+                              " Remove any previous match.
+    1              0.000015   if exists('w:paren_hl_on') && w:paren_hl_on
+                                3match none
+                                let w:paren_hl_on = 0
+                              endif
+                            
+                              " Avoid that we remove the popup menu.
+                              " Return when there are no colors (looks like the cursor jumps).
+    1              0.000011   if pumvisible() || (&t_Co < 8 && !has("gui_running"))
+                                return
+                              endif
+                            
+                              " Get the character under the cursor and check if it's in 'matchpairs'.
+    1              0.000009   let c_lnum = line('.')
+    1              0.000006   let c_col = col('.')
+    1              0.000047   let before = 0
+                            
+    1              0.000012   let c = getline(c_lnum)[c_col - 1]
+    1              0.000037   let plist = split(&matchpairs, '.\zs[:,]')
+    1              0.000008   let i = index(plist, c)
+    1              0.000003   if i < 0
+                                " not found, in Insert mode try character before the cursor
+    1              0.000010     if c_col > 1 && (mode() == 'i' || mode() == 'R')
+                                  let before = 1
+                                  let c = getline(c_lnum)[c_col - 2]
+                                  let i = index(plist, c)
+                                endif
+    1              0.000003     if i < 0
+                                  " not found, nothing to do
+    1              0.000002       return
+                                endif
+                              endif
+                            
+                              " Figure out the arguments for searchpairpos().
+                              if i % 2 == 0
+                                let s_flags = 'nW'
+                                let c2 = plist[i + 1]
+                              else
+                                let s_flags = 'nbW'
+                                let c2 = c
+                                let c = plist[i - 1]
+                              endif
+                              if c == '['
+                                let c = '\['
+                                let c2 = '\]'
+                              endif
+                            
+                              " Find the match.  When it was just before the cursor move it there for a
+                              " moment.
+                              if before > 0
+                                let save_cursor = winsaveview()
+                                call cursor(c_lnum, c_col - before)
+                              endif
+                            
+                              " When not in a string or comment ignore matches inside them.
+                              " We match "escape" for special items, such as lispEscapeSpecial.
+                              let s_skip ='synIDattr(synID(line("."), col("."), 0), "name") ' . '=~?  "string\\|character\\|singlequote\\|escape\\|comment"'
+                              execute 'if' s_skip '| let s_skip = 0 | endif'
+                            
+                              " Limit the search to lines visible in the window.
+                              let stoplinebottom = line('w$')
+                              let stoplinetop = line('w0')
+                              if i % 2 == 0
+                                let stopline = stoplinebottom
+                              else
+                                let stopline = stoplinetop
+                              endif
+                            
+                              " Limit the search time to 300 msec to avoid a hang on very long lines.
+                              " This fails when a timeout is not supported.
+                              if mode() == 'i' || mode() == 'R'
+                                let timeout = exists("b:matchparen_insert_timeout") ? b:matchparen_insert_timeout : g:matchparen_insert_timeout
+                              else
+                                let timeout = exists("b:matchparen_timeout") ? b:matchparen_timeout : g:matchparen_timeout
+                              endif
+                              try
+                                let [m_lnum, m_col] = searchpairpos(c, '', c2, s_flags, s_skip, stopline, timeout)
+                              catch /E118/
+                                " Can't use the timeout, restrict the stopline a bit more to avoid taking
+                                " a long time on closed folds and long lines.
+                                " The "viewable" variables give a range in which we can scroll while
+                                " keeping the cursor at the same position.
+                                " adjustedScrolloff accounts for very large numbers of scrolloff.
+                                let adjustedScrolloff = min([&scrolloff, (line('w$') - line('w0')) / 2])
+                                let bottom_viewable = min([line('$'), c_lnum + &lines - adjustedScrolloff - 2])
+                                let top_viewable = max([1, c_lnum-&lines+adjustedScrolloff + 2])
+                                " one of these stoplines will be adjusted below, but the current values are
+                                " minimal boundaries within the current window
+                                if i % 2 == 0
+                                  if has("byte_offset") && has("syntax_items") && &smc > 0
+                            	let stopbyte = min([line2byte("$"), line2byte(".") + col(".") + &smc * 2])
+                            	let stopline = min([bottom_viewable, byte2line(stopbyte)])
+                                  else
+                            	let stopline = min([bottom_viewable, c_lnum + 100])
+                                  endif
+                                  let stoplinebottom = stopline
+                                else
+                                  if has("byte_offset") && has("syntax_items") && &smc > 0
+                            	let stopbyte = max([1, line2byte(".") + col(".") - &smc * 2])
+                            	let stopline = max([top_viewable, byte2line(stopbyte)])
+                                  else
+                            	let stopline = max([top_viewable, c_lnum - 100])
+                                  endif
+                                  let stoplinetop = stopline
+                                endif
+                                let [m_lnum, m_col] = searchpairpos(c, '', c2, s_flags, s_skip, stopline)
+                              endtry
+                            
+                              if before > 0
+                                call winrestview(save_cursor)
+                              endif
+                            
+                              " If a match is found setup match highlighting.
+                              if m_lnum > 0 && m_lnum >= stoplinetop && m_lnum <= stoplinebottom 
+                                exe '3match MatchParen /\(\%' . c_lnum . 'l\%' . (c_col - before) . 'c\)\|\(\%' . m_lnum . 'l\%' . m_col . 'c\)/'
+                                let w:paren_hl_on = 1
+                              endif
+
+FUNCTION  nerdtree#has_opt()
+Called 3 times
+Total time:   0.000030
+ Self time:   0.000030
+
+count  total (s)   self (s)
+    3              0.000027     return has_key(a:options, a:name) && a:options[a:name] == 1
+
+FUNCTIONS SORTED ON TOTAL TIME
+count  total (s)   self (s)  function
+    3   0.000746   0.000322  33()
+    3   0.000394   0.000145  38()
+    1   0.000212             <SNR>71_Highlight_Matching_Pair()
+    6   0.000194   0.000073  28()
+    9   0.000176             nerdtree#runningWindows()
+    3   0.000030             nerdtree#has_opt()
+
+FUNCTIONS SORTED ON SELF TIME
+count  total (s)   self (s)  function
+    3   0.000746   0.000322  33()
+    1              0.000212  <SNR>71_Highlight_Matching_Pair()
+    9              0.000176  nerdtree#runningWindows()
+    3   0.000394   0.000145  38()
+    6   0.000194   0.000073  28()
+    3              0.000030  nerdtree#has_opt()
+
